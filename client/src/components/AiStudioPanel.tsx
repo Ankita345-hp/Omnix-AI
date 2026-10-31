@@ -166,13 +166,25 @@ export const AiStudioPanel: React.FC<AiStudioPanelProps> = ({
               <SentimentBadge label={interaction.sentiment_label} score={interaction.sentiment_score} size="sm" />
             </div>
             {/* Visual meter bar */}
-            <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden flex">
-              <div
-                className={`h-full transition-all duration-500 ${
-                  numericScore > 0.3 ? 'bg-emerald-500' : numericScore < -0.3 ? 'bg-red-500' : 'bg-amber-500'
-                }`}
-                style={{ width: `${normalizedMeter}%` }}
-              />
+            <div className="space-y-1 mt-2">
+              <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                <span>Negative (-1.0)</span>
+                <span>Positive (+1.0)</span>
+              </div>
+              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden flex relative">
+                {/* Center marker line for 0.0 */}
+                <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-600 z-10" />
+                <div
+                  className={`h-full transition-all duration-500 rounded-full ${
+                    numericScore > 0.2
+                      ? 'bg-gradient-to-r from-teal-500 to-emerald-400'
+                      : numericScore < -0.2
+                      ? 'bg-gradient-to-r from-rose-500 to-red-500'
+                      : 'bg-slate-400'
+                  }`}
+                  style={{ width: `${Math.max(5, Math.min(100, normalizedMeter))}%` }}
+                />
+              </div>
             </div>
           </div>
 
