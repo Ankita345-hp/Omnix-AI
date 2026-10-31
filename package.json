@@ -1,0 +1,31 @@
+{
+  "name": "omnix-ai",
+  "version": "1.0.0",
+  "description": "AI-Powered Omnichannel Customer Journey & Experience Intelligence Platform",
+  "type": "module",
+  "scripts": {
+    "install:all": "npm install && cd client && npm install",
+    "dev:server": "node server/index.js",
+    "dev:client": "vite client",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"node server/index.js\" \"vite client\"",
+    "build:client": "vite build client",
+    "build": "vite build client",
+    "start": "NODE_ENV=production node server/index.js",
+    "migrate": "node server/migrate.js"
+  },
+  "dependencies": {
+    "@google/genai": "^2.32.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "pg": "^8.13.1",
+    "uuid": "^11.0.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

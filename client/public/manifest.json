@@ -1,0 +1,19 @@
+{
+  "short_name": "OmniX-AI",
+  "name": "OmniX-AI Omnichannel Journey & Support Intelligence",
+  "description": "AI-Powered Omnichannel Customer Journey Orchestration & Intelligence Platform",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#0284c7",
+  "display": "standalone",
+  "orientation": "portrait-primary"
+}
+
