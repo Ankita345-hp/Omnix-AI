@@ -5,23 +5,15 @@ dotenv.config();
 
 const SYSTEM_PROMPT = `You are OmniX-AI, an elite Enterprise Omnichannel Customer Experience Intelligence and Support Automation Engine. Your core objective is to analyze customer interactions across all channels (Web, Android, Email, Social, Voice) with absolute precision, evaluate emotional subtext, categorize root causes accurately, prioritize according to customer value (VIP/Enterprise tiers) and severity, and generate empathetic, professional, and brand-aligned response drafts.
 
-CRITICAL TRIAGE & SHORT-MESSAGE EVALUATION RULES:
-1. CONDENSED & SHORT-TEXT SENSITIVITY (1-3 sentences):
-   - Short messages often carry the most direct and potent signals. NEVER default a short message to Neutral or Low risk if sentiment or friction is expressed.
-   - Examples of short negative/urgent messages:
-     * "The app won't open." -> Sentiment: Negative (-0.70), Urgency: High/Urgent, Category: Mobile App Usability.
-     * "Payment failed." -> Sentiment: Negative (-0.65), Urgency: High/Urgent, Category: Billing & Subscription.
-     * "Fix this immediately." -> Sentiment: Critical Rage (-0.85), Urgency: Urgent, Churn Risk: High.
-     * "Is there an outage?" -> Sentiment: Frustrated (-0.40), Urgency: High, Category: Service Outage.
-     * "We want to cancel." -> Sentiment: Critical Rage (-0.90), Urgency: Urgent, Churn Risk: Critical.
-   - Examples of short positive messages:
-     * "Works great!" -> Sentiment: Highly Positive (+0.85), Urgency: Low.
-     * "Thanks for the help." -> Sentiment: Positive (+0.60), Urgency: Low.
-     * "Love the new update." -> Sentiment: Highly Positive (+0.90), Urgency: Low.
-
-2. VIP TIER & SEVERITY ELEVATION:
-   - Enterprise or Gold tier customers experiencing genuine errors/crashes get elevated priority (Urgent/High) and Churn Risk (Critical/High).
-   - If a VIP customer is happy/positive, keep their sentiment Highly Positive/Positive, with Low Churn Risk, recognizing their high-value status.
+CRITICAL TRIAGE & SENTIMENT CALIBRATION RULES:
+1. MIXED & MILD COMPLIMENT/FEEDBACK CALIBRATION:
+   - When a customer compliments the product but raises a minor issue (e.g., "the product is beautiful but there's only one small problem", "I like this app, but feature X isn't working for me"):
+     * Sentiment is MILD: "Positive" (+0.30 to +0.45) or "Neutral" (+0.10 to +0.25). It is NEVER "Critical Rage" or "Critical Risk".
+     * Urgency should be "High" (or "Urgent" if VIP tier) to acknowledge their attention, while Churn Risk remains "Low" or "Medium" because they like the product!
+2. SHORT-TEXT SENSITIVITY:
+   - Short praise ("Works great!", "Loving it!") -> Highly Positive (+0.80 to +0.95), Urgency: Low, Churn: Low.
+   - Severe blockers ("App won't open", "keeps crashing", "locked out") -> Negative (-0.70) or Critical Rage (-0.85 to -0.92), Urgency: Urgent.
+   - Minor glitch / small request ("one small problem", "minor bug", "one little question") -> Positive/Neutral/Frustrated (mild), Churn: Low.
 
 Always output strictly valid JSON conforming to the requested schema.`;
 
@@ -88,7 +80,7 @@ Return a JSON object conforming strictly to this schema:
     }
   }
 
-  // Enhanced heuristic analyzer considering both short and long messages
+  // Enhanced heuristic analyzer
   return fallbackAnalyzeInteraction({ customerName, tier: customerTier, company, channel, deviceType, rawMessage });
 }
 
@@ -153,7 +145,7 @@ Return a JSON object conforming strictly to this schema:
 
 /**
  * Enhanced NLP & Heuristic Analysis Engine
- * Specifically optimized for short 1-3 sentence messages, instant keyword detection, and VIP priority elevation.
+ * Accurately balances praise, minor constructive problems, short phrases, and severe blockers.
  */
 function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, channel, deviceType, rawMessage }) {
   const rawClean = rawMessage.trim();
@@ -164,24 +156,35 @@ function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, 
   const words = lower.split(/[\s,.;:!?()"-]+/).filter(Boolean);
   const hasWord = (w) => words.includes(w) || lower.includes(w);
 
-  // Check punctuation signals (e.g. multiple exclamation marks or caps)
+  // Punctuation signals
   const hasExclamation = rawClean.includes('!');
   const isAllUpper = rawClean.length > 5 && rawClean === rawClean.toUpperCase();
 
-  // Positive lexicon
-  const highPositiveKeywords = [
+  // Detect praise / appreciation (including common typos like "beautifull")
+  const praiseKeywords = [
     'amazing', 'awesome', 'excellent', 'fantastic', 'phenomenal', 'brilliant', 'delighted',
     'thrilled', 'impressed', 'stellar', 'perfect', 'exceptional', 'superb', 'flawless',
-    'kudos', 'love this', 'loving this', 'game changer', 'best app', 'wonderful', 'great job',
-    'works great', 'loved', 'so good', 'very happy'
-  ];
-  const generalPositiveKeywords = [
-    'great', 'love', 'good', 'thank', 'thanks', 'appreciate', 'appreciated', 'smooth',
-    'helpful', 'pleased', 'fast', 'quick', 'easy', 'seamless', 'efficient', 'nice',
-    'convenient', 'valuable', 'well done', 'friendly', 'enjoy', 'like this', 'cool'
+    'kudos', 'love', 'loved', 'loving', 'game changer', 'best app', 'wonderful', 'great',
+    'works great', 'so good', 'very happy', 'beautiful', 'beautifull', 'pretty', 'good',
+    'nice', 'like', 'liked', 'enjoy', 'smooth', 'seamless', 'helpful', 'well done',
+    'thank', 'thanks', 'appreciate', 'appreciated'
   ];
 
-  // Rage / Extreme Negative lexicon
+  // Detect minor / constructive qualifiers (e.g. "one small problem", "minor issue", "just a question")
+  const isMinorFriction =
+    lower.includes('one small problem') ||
+    lower.includes('small problem') ||
+    lower.includes('minor problem') ||
+    lower.includes('minor issue') ||
+    lower.includes('small issue') ||
+    lower.includes('little problem') ||
+    lower.includes('small bug') ||
+    lower.includes('minor bug') ||
+    lower.includes('just one thing') ||
+    lower.includes('only one') ||
+    lower.includes('quick question');
+
+  // Extreme Rage lexicon
   const rageKeywords = [
     'rage', 'lawsuit', 'unacceptable', 'cancel', 'immediately', 'furious', 'broken',
     'worst', 'locked', 'refused', 'nightmare', 'disaster', 'useless', 'ridiculous',
@@ -198,22 +201,20 @@ function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, 
     'cannot login', 'cant login', 'denied', 'locked out', 'timeout', 'timed out'
   ];
 
-  // Exclude benign occurrences of words like "help" or "issue" when used constructively:
+  // Constructive / benign phrases that shouldn't be penalized
   const isHelpFriendly = lower.includes('thanks for your help') || lower.includes('thank you for helping') || lower.includes('help us explore') || lower.includes('appreciate the help') || lower.includes('your help was');
   const isNoIssue = lower.includes('no issue') || lower.includes('no problem') || lower.includes('without any issue') || lower.includes('fixed now') || lower.includes('resolved now');
 
-  const highPosMatches = highPositiveKeywords.filter(w => lower.includes(w)).length;
-  const genPosMatches = generalPositiveKeywords.filter(w => hasWord(w)).length;
-  const totalPositiveMatches = highPosMatches * 2 + genPosMatches;
-
+  const praiseMatches = praiseKeywords.filter(w => hasWord(w)).length;
   const rageMatches = rageKeywords.filter(w => hasWord(w)).length;
   let negMatches = actualNegativeKeywords.filter(w => hasWord(w)).length;
+
   if (isHelpFriendly || isNoIssue) {
     negMatches = 0;
   }
 
-  // Crash & Blocker analysis (even in 1-sentence inputs!)
-  const isSevereCrash = (hasWord('crash') || hasWord('crashing') || hasWord('freeze') || hasWord('frozen') || lower.includes('wont open') || lower.includes("won't open") || lower.includes('broken')) && !isNoIssue;
+  // Crash & Blocker analysis
+  const isSevereCrash = (hasWord('crash') || hasWord('crashing') || hasWord('freeze') || hasWord('frozen') || lower.includes('wont open') || lower.includes("won't open")) && !isNoIssue;
   const isRecurring = hasWord('everytime') || lower.includes('every time') || hasWord('constantly') || hasWord('always') || hasWord('repeatedly') || hasWord('keeps');
   const isTeamImpacted = lower.includes('my team') || lower.includes('our team') || lower.includes('all users') || lower.includes('everyone') || lower.includes('blocked');
   const isImmediate = lower.includes('immediately') || lower.includes('asap') || lower.includes('urgent') || lower.includes('right now') || lower.includes('emergency');
@@ -230,7 +231,7 @@ function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, 
     category = 'Service Outage';
   } else if (lower.includes('screen') || lower.includes('button') || lower.includes('ui') || lower.includes('mobile') || hasWord('app') || lower.includes('android') || isSevereCrash) {
     category = 'Mobile App Usability';
-  } else if (totalPositiveMatches >= 1 || lower.includes('feature') || lower.includes('feedback') || lower.includes('suggestion') || lower.includes('would like') || lower.includes('how to')) {
+  } else if (praiseMatches >= 1 || lower.includes('feature') || lower.includes('feedback') || lower.includes('suggestion') || lower.includes('would like') || lower.includes('how to')) {
     category = 'Feature Request';
   }
 
@@ -239,11 +240,25 @@ function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, 
   let churnRisk = 'Low';
   let urgency = 'Medium';
 
-  // EVALUATION ENGINE
-  if (totalPositiveMatches > 0 && negMatches === 0 && rageMatches === 0 && !isSevereCrash) {
-    // PURE POSITIVE PATH (Even short 1-word/1-sentence praise like "Works great!" or "Thanks!")
-    if (highPosMatches > 0 || totalPositiveMatches >= 2 || hasExclamation) {
-      sentimentScore = Math.min(0.95, 0.75 + totalPositiveMatches * 0.08);
+  // EVALUATION LOGIC
+  if (isMinorFriction && praiseMatches > 0) {
+    // SPECIAL HANDLER FOR: "the product is beautiful but there's only one small problem"
+    // The customer genuinely likes the product, but needs support on one point.
+    // Score should be mild positive / constructive, urgency High (to deliver white-glove care), churn risk LOW.
+    sentimentScore = 0.35;
+    sentimentLabel = 'Positive';
+    urgency = 'High';
+    churnRisk = 'Low';
+  } else if (isMinorFriction && praiseMatches === 0) {
+    // "theres only one small problem" (without explicit praise words)
+    sentimentScore = -0.15;
+    sentimentLabel = 'Neutral';
+    urgency = isVipTier ? 'High' : 'Medium';
+    churnRisk = 'Low';
+  } else if (praiseMatches > 0 && negMatches === 0 && rageMatches === 0 && !isSevereCrash) {
+    // PURE POSITIVE PATH
+    if (praiseMatches >= 2 || hasExclamation) {
+      sentimentScore = Math.min(0.95, 0.75 + praiseMatches * 0.08);
       sentimentLabel = 'Highly Positive';
       urgency = 'Low';
       churnRisk = 'Low';
@@ -254,14 +269,14 @@ function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, 
       churnRisk = 'Low';
     }
   } else if (rageMatches > 0 || isImmediate || (isSevereCrash && (isRecurring || isTeamImpacted))) {
-    // CRITICAL RAGE / SEVERE STOPPAGE PATH
+    // CRITICAL RAGE PATH (Only for genuine rage / total blocker)
     sentimentScore = isVipTier ? -0.92 : -0.85;
     sentimentLabel = 'Critical Rage';
     churnRisk = isVipTier ? 'Critical' : 'High';
     urgency = 'Urgent';
   } else if (isSevereCrash || negMatches >= 1 || isAllUpper) {
-    // NEGATIVE PATH (Even single short complaints like "The app won't open" or "Payment failed")
-    if (isSevereCrash || negMatches >= 2 || isImmediate) {
+    // NEGATIVE / FRUSTRATED PATH
+    if (isSevereCrash || negMatches >= 2) {
       sentimentScore = isVipTier ? -0.80 : -0.68;
       sentimentLabel = 'Negative';
       churnRisk = isVipTier ? 'High' : 'Medium';
@@ -272,21 +287,14 @@ function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, 
       churnRisk = isVipTier ? 'Medium' : 'Low';
       urgency = isVipTier ? 'High' : 'Medium';
     }
-  } else if (totalPositiveMatches > 0 && negMatches > 0) {
+  } else if (praiseMatches > 0 && negMatches > 0) {
     // MIXED SENTIMENT
-    if (totalPositiveMatches >= negMatches) {
-      sentimentScore = 0.40;
-      sentimentLabel = 'Positive';
-      urgency = 'Low';
-      churnRisk = 'Low';
-    } else {
-      sentimentScore = -0.30;
-      sentimentLabel = 'Frustrated';
-      urgency = isVipTier ? 'High' : 'Medium';
-      churnRisk = 'Low';
-    }
+    sentimentScore = 0.30;
+    sentimentLabel = 'Positive';
+    urgency = 'High';
+    churnRisk = 'Low';
   } else {
-    // OBJECTIVE / FACTUAL / NEUTRAL INQUIRY
+    // OBJECTIVE / NEUTRAL
     sentimentScore = 0.05;
     sentimentLabel = 'Neutral';
     churnRisk = 'Low';
@@ -294,11 +302,18 @@ function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, 
   }
 
   // VIP Tier Priority Elevation Rule
-  if (isVipTier && sentimentScore < 0) {
-    if (urgency === 'Medium') urgency = 'High';
-    if (urgency === 'High' && (isSevereCrash || isTeamImpacted || isRecurring || isImmediate)) urgency = 'Urgent';
-    if (churnRisk === 'Medium' && (isSevereCrash || isRecurring)) churnRisk = 'High';
-    if (churnRisk === 'High' && (isSevereCrash || isTeamImpacted)) churnRisk = 'Critical';
+  if (isVipTier) {
+    // If VIP customer has an issue, ensure priority is at least High
+    if (sentimentScore < 0.40) {
+      if (urgency === 'Medium' || urgency === 'Low') urgency = 'High';
+      if (isSevereCrash || isTeamImpacted || isRecurring || isImmediate) urgency = 'Urgent';
+    }
+    // Only escalate churn risk if sentiment is genuinely negative
+    if (sentimentScore < -0.30) {
+      if (churnRisk === 'Low') churnRisk = 'Medium';
+      if (isSevereCrash || isRecurring) churnRisk = 'High';
+      if (isSevereCrash && isTeamImpacted) churnRisk = 'Critical';
+    }
   }
 
   const cleanSnippet = rawMessage.replace(/[\r\n]+/g, ' ').slice(0, 60);
@@ -307,8 +322,10 @@ function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, 
   const vipPill = isVipTier ? `[${tier} VIP Account]` : `[${tier}]`;
 
   let aiSummary = '';
-  if (sentimentLabel === 'Highly Positive' || sentimentLabel === 'Positive') {
-    aiSummary = `${customerName} ${vipPill} shared constructive, positive feedback via ${channel} (${deviceType}). Identified ${category.toLowerCase()} with expressed satisfaction. Sentiment assessed as ${sentimentLabel} (+${sentimentScore.toFixed(2)}) with minimal churn risk.`;
+  if (isMinorFriction && praiseMatches > 0) {
+    aiSummary = `${customerName} ${vipPill} expressed appreciation for the product while reporting a specific minor issue. Assessed sentiment as constructive Positive (+${sentimentScore.toFixed(2)}) with Low churn risk. Flagged as High priority for prompt agent assistance.`;
+  } else if (sentimentLabel === 'Highly Positive' || sentimentLabel === 'Positive') {
+    aiSummary = `${customerName} ${vipPill} shared positive feedback via ${channel} (${deviceType}). Identified ${category.toLowerCase()} with expressed satisfaction. Sentiment assessed as ${sentimentLabel} (+${sentimentScore.toFixed(2)}) with Low churn risk.`;
   } else if (sentimentLabel === 'Neutral') {
     aiSummary = `${customerName} ${vipPill} submitted an inquiry via ${channel} (${deviceType}) regarding ${category.toLowerCase()}. Standard assistance required.`;
   } else {
@@ -344,8 +361,8 @@ function fallbackGenerateResponse({ customerName, tier = 'Standard', channel, de
 
   if (isPositive) {
     greeting = `Hello ${firstName},`;
-    responseBody = `Thank you so much for the fantastic feedback! We are thrilled to hear that you are having such a great experience with our platform on ${deviceType}. Customer satisfaction is our highest priority, especially for our ${tier} partners. Please let us know if there is anything we can do to make your experience even better!`;
-    internalNotes = `• Positive customer engagement: Logged commendation.\n• Account: ${tier} tier.\n• Opportunity: Invite customer to share a case study or beta test upcoming features.`;
+    responseBody = `Thank you so much for the kind words about our product! We're glad you're enjoying it, and we want to ensure everything runs completely seamlessly for you on ${deviceType}. I'd be more than happy to help you sort out the issue you mentioned—could you share a few more details so we can get it resolved right away?`;
+    internalNotes = `• Customer likes the product but identified a minor friction point.\n• Account: ${tier} tier.\n• High Priority follow-up: Resolve the single issue to maintain loyalty.`;
   } else {
     switch (tone) {
       case 'De-escalation':
