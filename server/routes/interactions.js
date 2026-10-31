@@ -175,10 +175,13 @@ router.post('/', validate(createInteractionSchema), async (req, res, next) => {
     // 2. Assign Default Agent (e.g. Elena Rostova or round robin)
     let assignedAgentId = memory.users[2]?.id || null; // Elena Rostova default for Tier 1 / Mobile
 
-    // 3. Trigger Synchronous Gemini AI Analysis
-    console.log(`[OmniX-AI] Analyzing interaction from ${customerName} via ${channel}...`);
+    // 3. Trigger Synchronous Gemini AI Analysis (passing tier, company, and customer metadata)
+    console.log(`[OmniX-AI] Analyzing interaction from ${customerName} (Tier: ${tier}) via ${channel}...`);
     const aiAnalysis = await analyzeInteraction({
       customerName,
+      customerEmail,
+      company,
+      tier,
       channel,
       deviceType,
       rawMessage
@@ -441,10 +444,12 @@ router.post('/:id/analyze', async (req, res, next) => {
 
     let target = null;
     let customerName = 'Customer';
+    let customerTier = 'Standard';
+    let customerCompany = '';
 
     if (isUsingPostgres()) {
       const resInter = await query(
-        `SELECT i.*, c.name as customer_name FROM interactions i
+        `SELECT i.*, c.name as customer_name, c.tier as customer_tier, c.company as customer_company FROM interactions i
          LEFT JOIN customers c ON i.customer_id = c.id WHERE i.id = $1`,
         [id]
       );
@@ -453,17 +458,25 @@ router.post('/:id/analyze', async (req, res, next) => {
       }
       target = resInter.rows[0];
       customerName = target.customer_name || 'Customer';
+      customerTier = target.customer_tier || 'Standard';
+      customerCompany = target.customer_company || '';
     } else {
       target = memory.interactions.find(i => i.id === id);
       if (!target) {
         return res.status(404).json({ success: false, error: 'Interaction not found' });
       }
       const cust = memory.customers.find(c => c.id === target.customer_id);
-      if (cust) customerName = cust.name;
+      if (cust) {
+        customerName = cust.name;
+        customerTier = cust.tier || 'Standard';
+        customerCompany = cust.company || '';
+      }
     }
 
     const aiAnalysis = await analyzeInteraction({
       customerName,
+      tier: customerTier,
+      company: customerCompany,
       channel: target.channel,
       deviceType: target.device_type,
       rawMessage: target.raw_message
@@ -534,10 +547,12 @@ router.post('/:id/generate-response', validate(generateResponseSchema), async (r
 
     let target = null;
     let customerName = 'Customer';
+    let customerTier = 'Standard';
+    let customerCompany = '';
 
     if (isUsingPostgres()) {
       const resInter = await query(
-        `SELECT i.*, c.name as customer_name FROM interactions i
+        `SELECT i.*, c.name as customer_name, c.tier as customer_tier, c.company as customer_company FROM interactions i
          LEFT JOIN customers c ON i.customer_id = c.id WHERE i.id = $1`,
         [id]
       );
@@ -546,17 +561,25 @@ router.post('/:id/generate-response', validate(generateResponseSchema), async (r
       }
       target = resInter.rows[0];
       customerName = target.customer_name || 'Customer';
+      customerTier = target.customer_tier || 'Standard';
+      customerCompany = target.customer_company || '';
     } else {
       target = memory.interactions.find(i => i.id === id);
       if (!target) {
         return res.status(404).json({ success: false, error: 'Interaction not found' });
       }
       const cust = memory.customers.find(c => c.id === target.customer_id);
-      if (cust) customerName = cust.name;
+      if (cust) {
+        customerName = cust.name;
+        customerTier = cust.tier || 'Standard';
+        customerCompany = cust.company || '';
+      }
     }
 
     const aiDraft = await generateResponse({
       customerName,
+      tier: customerTier,
+      company: customerCompany,
       channel: target.channel,
       deviceType: target.device_type,
       rawMessage: target.raw_message,

@@ -42,6 +42,16 @@ export const NewInteractionModal: React.FC<NewInteractionModalProps> = ({
 
   const samplePresets = [
     {
+      label: 'Team Crash on Open (VIP Enterprise - Urgent)',
+      name: 'Jordan Miller',
+      email: 'jmiller@vanguard-holdings.com',
+      company: 'Vanguard Holdings LLC',
+      tier: 'Enterprise' as TierType,
+      channel: 'Mobile App' as ChannelType,
+      device: 'Android App' as DeviceType,
+      message: 'My team reported that the app was crashing everytime while opening. We are on the VIP Enterprise tier and this is blocking all field operations today!'
+    },
+    {
       label: 'Android In-App Crash (Critical Rage)',
       name: 'Alexander Hayes',
       email: 'alexander.hayes@apexfintech.io',
