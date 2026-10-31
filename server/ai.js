@@ -3,22 +3,24 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const SYSTEM_PROMPT = `You are OmniX-AI, an elite Enterprise Omnichannel Customer Experience Intelligence and Support Automation Engine. Your core objective is to analyze customer interactions across all channels (Web, Android, Email, Social, Voice) with absolute precision, evaluate emotional subtext, categorize root causes accurately, prioritize according to customer value (VIP/Enterprise tiers) and severity (e.g. repeated crashes, operational stoppage), and generate empathetic, professional, and brand-aligned response drafts.
+const SYSTEM_PROMPT = `You are OmniX-AI, an elite Enterprise Omnichannel Customer Experience Intelligence and Support Automation Engine. Your core objective is to analyze customer interactions across all channels (Web, Android, Email, Social, Voice) with absolute precision, evaluate emotional subtext, categorize root causes accurately, prioritize according to customer value (VIP/Enterprise tiers) and severity, and generate empathetic, professional, and brand-aligned response drafts.
 
 CRITICAL TRIAGE & PRIORITY RULES:
-1. CUSTOMER TIER & VIP IMPORTANCE:
-   - Enterprise or Gold tier customers experiencing disruptions MUST be prioritized immediately.
-   - Any crash or outage affecting a VIP or Enterprise account is automatically High or Urgent priority.
-2. INCIDENT SEVERITY:
-   - Repeated app crashes, inability to open the app, payment failures, or dashboard lockouts represent severe friction (High to Urgent priority).
-   - Casual inquiries, compliments, or minor cosmetic feedback are Low to Medium priority.
-3. SENTIMENT EVALUATION:
-   - "Critical Rage" (-0.80 to -1.00): App crashes, threats to cancel, locked out, extreme disruption.
-   - "Negative" (-0.50 to -0.79): Significant bugs, broken features, repeated issues, severe inconvenience.
-   - "Frustrated" (-0.20 to -0.49): Annoyance, delays, unexpected behavior.
-   - "Neutral" (-0.19 to +0.20): Objective questions, procedural queries.
-   - "Positive" (+0.21 to +0.60): Helpful, satisfied, constructive.
-   - "Highly Positive" (+0.61 to +1.00): Enthusiastic delight, praise.
+1. BALANCED & ACCURATE SENTIMENT DETECTION:
+   - "Highly Positive" (+0.65 to +1.00): Customer shows genuine delight, enthusiasm, praise, love, compliments, high satisfaction, or commendations. Urgency is Low, Churn Risk is Low.
+   - "Positive" (+0.25 to +0.64): Constructive appreciation, pleasant tone, thanking the team, satisfied feedback, optimistic expansion inquiries. Urgency is Low, Churn Risk is Low.
+   - "Neutral" (-0.19 to +0.24): Objective questions, procedural inquiries, factual feature queries without emotional charge. Urgency is Low to Medium, Churn Risk is Low.
+   - "Frustrated" (-0.20 to -0.49): Minor annoyance, delays, unexpected friction, needing clarification on a problem. Urgency is Medium (or High if VIP tier).
+   - "Negative" (-0.50 to -0.79): Significant bugs, broken features, payment problems, repeated friction. Urgency is High (or Urgent if VIP tier).
+   - "Critical Rage" (-0.80 to -1.00): App crashes, threats to cancel, team locked out, extreme disruption. Urgency is Urgent, Churn Risk is Critical/High.
+
+2. POSITIVE CONTEXT PRESERVATION:
+   - Do NOT label positive messages, praise, compliments, or satisfied inquiries as "Frustrated" or "Negative".
+   - Words like "can you help me explore", "how does this work", or "thank you for your help" are positive/neutral, NEVER negative.
+
+3. VIP TIER & SEVERITY ELEVATION:
+   - Enterprise or Gold tier customers experiencing genuine errors/crashes get elevated priority.
+   - If a VIP customer is happy/positive, keep their sentiment Highly Positive/Positive, with Low Churn Risk, recognizing their high-value status.
 
 Always output strictly valid JSON conforming to the requested schema.`;
 
@@ -43,7 +45,7 @@ export async function analyzeInteraction({ customerName, customerEmail, company,
       console.log(`[OmniX-AI Gemini] Invoking ${modelName} for interaction analysis (Customer Tier: ${customerTier})...`);
       const userPrompt = `Analyze the following customer interaction message:
 Customer Name: ${customerName}
-Customer Tier: ${customerTier} (Note: Enterprise/Gold are VIP high-value accounts)
+Customer Tier: ${customerTier}
 Company: ${company || 'N/A'}
 Channel: ${channel}
 Device Type: ${deviceType}
@@ -57,7 +59,7 @@ Return a JSON object conforming strictly to this schema:
   "sentimentLabel": "One of [Highly Positive, Positive, Neutral, Frustrated, Negative, Critical Rage]",
   "urgency": "One of [Low, Medium, High, Urgent]",
   "churnRisk": "One of [Low, Medium, High, Critical]",
-  "aiSummary": "2-3 sentence executive summary explaining the customer's core issue, impact on their team/work, and their account tier context."
+  "aiSummary": "2-3 sentence executive summary explaining the customer's core intent, emotional state, and account tier context."
 }`;
 
       const response = await client.models.generateContent({
@@ -85,7 +87,7 @@ Return a JSON object conforming strictly to this schema:
     }
   }
 
-  // Enhanced heuristic analyzer considering VIP tiers, crashes, team impact
+  // Enhanced heuristic analyzer considering both positive and negative nuances
   return fallbackAnalyzeInteraction({ customerName, tier: customerTier, company, channel, deviceType, rawMessage });
 }
 
@@ -102,11 +104,11 @@ export async function generateResponse({ customerName, tier, company, channel, d
       console.log(`[OmniX-AI Gemini] Invoking ${modelName} for smart response generation with tone "${tone}" (Tier: ${customerTier})...`);
       const userPrompt = `You are an expert customer experience specialist. Generate a professional reply to this customer.
 Customer Name: ${customerName}
-Account Tier: ${customerTier} ${customerTier === 'Enterprise' || customerTier === 'Gold' ? '(VIP Tier - treat with highest priority)' : ''}
+Account Tier: ${customerTier} ${customerTier === 'Enterprise' || customerTier === 'Gold' ? '(VIP Tier)' : ''}
 Company: ${company || 'N/A'}
 Channel: ${channel}
 Device: ${deviceType}
-Original Issue: ${rawMessage}
+Original Message: ${rawMessage}
 Detected Sentiment: ${sentimentLabel}
 Category: ${category}
 Requested Tone: ${tone} (Empathetic, Executive, Consultative, De-escalation)
@@ -150,76 +152,138 @@ Return a JSON object conforming strictly to this schema:
 
 /**
  * Enhanced NLP & Heuristic Analysis Engine
- * Taking into account VIP/Enterprise tiers, crash frequency, team impact, and sentiment depth.
+ * Accurately processes positive delight, compliments, feature requests, and severe friction.
  */
 function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, channel, deviceType, rawMessage }) {
   const lower = rawMessage.toLowerCase();
   const isVipTier = tier === 'Enterprise' || tier === 'Gold' || lower.includes('vip') || lower.includes('enterprise');
 
-  // Category determination
-  let category = 'Mobile App Usability';
-  if (lower.includes('cancel') || lower.includes('contract') || lower.includes('terminate') || lower.includes('switch to competitor') || lower.includes('leaving')) {
-    category = 'Cancellation Threat';
-  } else if (lower.includes('bill') || lower.includes('charge') || lower.includes('subscription') || lower.includes('invoice') || lower.includes('refund') || lower.includes('payment') || lower.includes('google pay')) {
-    category = 'Billing & Subscription';
-  } else if (lower.includes('login') || lower.includes('sso') || lower.includes('saml') || lower.includes('password') || lower.includes('auth') || lower.includes('token') || lower.includes('403') || lower.includes('locked out')) {
-    category = 'Account Authentication';
-  } else if (lower.includes('outage') || lower.includes('server down') || lower.includes('500') || lower.includes('system down') || lower.includes('service unavailable')) {
-    category = 'Service Outage';
-  } else if (lower.includes('crash') || lower.includes('crashing') || lower.includes('freeze') || lower.includes('wont open') || lower.includes("won't open") || lower.includes('closes') || lower.includes('screen') || lower.includes('mobile') || lower.includes('app')) {
-    category = 'Mobile App Usability';
-  } else if (lower.includes('feature') || lower.includes('suggestion') || lower.includes('request') || lower.includes('would like') || lower.includes('kafka') || lower.includes('api')) {
-    category = 'Feature Request';
+  // Tokenize words and clean punctuation for accurate matching
+  const words = lower.split(/[\s,.;:!?()"-]+/).filter(Boolean);
+  const hasWord = (w) => words.includes(w) || lower.includes(w);
+
+  // Positive lexicon
+  const highPositiveKeywords = [
+    'amazing', 'awesome', 'excellent', 'fantastic', 'phenomenal', 'brilliant', 'delighted',
+    'thrilled', 'impressed', 'stellar', 'perfect', 'exceptional', 'superb', 'flawless',
+    'kudos', 'love this', 'loving this', 'game changer', 'best app', 'wonderful', 'great job'
+  ];
+  const generalPositiveKeywords = [
+    'great', 'love', 'good', 'thank', 'thanks', 'appreciate', 'appreciated', 'smooth',
+    'helpful', 'pleased', 'fast', 'quick', 'easy', 'seamless', 'efficient', 'nice',
+    'convenient', 'valuable', 'well done', 'friendly', 'enjoy'
+  ];
+
+  // Rage / Extreme Negative lexicon
+  const rageKeywords = [
+    'rage', 'lawsuit', 'unacceptable', 'cancel', 'immediately', 'furious', 'broken',
+    'worst', 'locked', 'refused', 'nightmare', 'disaster', 'useless', 'ridiculous',
+    'horrible', 'abysmal', 'garbage', 'scam', 'fraud'
+  ];
+
+  // Negative / Friction lexicon (only when context is truly negative)
+  const actualNegativeKeywords = [
+    'error', 'frustrated', 'annoyed', 'fail', 'failed', 'failing', 'waiting too long',
+    'slow', 'delay', 'delayed', 'buggy', 'cannot work', 'cant work', 'problem', 'trouble',
+    'stuck', 'not working', 'stops working', 'crash', 'crashing', 'crashed', 'freeze', 'freezing'
+  ];
+
+  // Exclude benign occurrences of words like "help" or "issue" when used constructively:
+  // e.g. "thanks for your help", "no issue", "help us explore", "appreciate the help"
+  const isHelpFriendly = lower.includes('thanks for your help') || lower.includes('thank you for helping') || lower.includes('help us explore') || lower.includes('appreciate the help') || lower.includes('your help was');
+  const isNoIssue = lower.includes('no issue') || lower.includes('no problem') || lower.includes('without any issue');
+
+  const highPosScore = highPositiveKeywords.filter(w => lower.includes(w)).length;
+  const genPosScore = generalPositiveKeywords.filter(w => hasWord(w)).length;
+  const totalPositiveMatches = highPosScore * 2 + genPosScore;
+
+  const rageScore = rageKeywords.filter(w => hasWord(w)).length;
+  let negScore = actualNegativeKeywords.filter(w => hasWord(w)).length;
+  if (isHelpFriendly || isNoIssue) {
+    negScore = 0; // Neutralize benign words
   }
 
-  // Severity & Negative triggers
-  const isSevereCrash = lower.includes('crash') || lower.includes('crashing') || lower.includes('freeze') || lower.includes('frozen') || lower.includes('stops working') || lower.includes('keeps closing') || lower.includes('black screen');
-  const isRecurring = lower.includes('everytime') || lower.includes('every time') || lower.includes('constantly') || lower.includes('always') || lower.includes('repeatedly') || lower.includes('2 days') || lower.includes('multiple times');
-  const isTeamImpacted = lower.includes('my team') || lower.includes('our team') || lower.includes('all users') || lower.includes('everyone') || lower.includes('whole company') || lower.includes('cannot work') || lower.includes('blocked');
+  // Crash & Blocker analysis
+  const isSevereCrash = (hasWord('crash') || hasWord('crashing') || hasWord('freeze') || hasWord('frozen')) && !isNoIssue;
+  const isRecurring = hasWord('everytime') || lower.includes('every time') || hasWord('constantly') || hasWord('always') || hasWord('repeatedly');
+  const isTeamImpacted = lower.includes('my team') || lower.includes('our team') || lower.includes('all users') || lower.includes('everyone') || lower.includes('blocked');
 
-  const rageWords = ['rage', 'lawsuit', 'unacceptable', 'cancel', 'immediately', 'furious', 'broken', 'worst', 'locked', 'refused', 'nightmare', 'disaster', 'useless', 'ridiculous', 'urgent', 'horrible'];
-  const negativeWords = ['error', 'frustrated', 'annoyed', 'fail', 'waiting', 'slow', 'delay', 'issue', 'bug', 'cannot', 'cant', 'help', 'problem', 'trouble', 'stuck', 'not working'];
-  const positiveWords = ['great', 'love', 'amazing', 'thank', 'thanks', 'quick', 'kudos', 'appreciate', 'smooth', 'helpful', 'delighted', 'awesome'];
-
-  const rageMatches = rageWords.filter(w => lower.includes(w)).length;
-  const negMatches = negativeWords.filter(w => lower.includes(w)).length;
-  const posMatches = positiveWords.filter(w => lower.includes(w)).length;
+  // Category determination
+  let category = 'Feature Request';
+  if (lower.includes('cancel') || lower.includes('contract') || lower.includes('terminate') || lower.includes('switch to competitor') || lower.includes('leaving')) {
+    category = 'Cancellation Threat';
+  } else if (lower.includes('bill') || lower.includes('charge') || lower.includes('subscription') || lower.includes('invoice') || lower.includes('refund') || lower.includes('payment') || lower.includes('pricing')) {
+    category = 'Billing & Subscription';
+  } else if (lower.includes('login') || lower.includes('sso') || lower.includes('saml') || lower.includes('password') || lower.includes('auth') || lower.includes('token') || lower.includes('403')) {
+    category = 'Account Authentication';
+  } else if (lower.includes('outage') || lower.includes('server down') || lower.includes('500') || lower.includes('service unavailable')) {
+    category = 'Service Outage';
+  } else if (lower.includes('screen') || lower.includes('button') || lower.includes('ui') || lower.includes('mobile') || hasWord('app') || lower.includes('android') || isSevereCrash) {
+    category = 'Mobile App Usability';
+  } else if (totalPositiveMatches >= 1 || lower.includes('feature') || lower.includes('feedback') || lower.includes('suggestion') || lower.includes('would like')) {
+    category = 'Feature Request';
+  }
 
   let sentimentScore = 0.0;
   let sentimentLabel = 'Neutral';
   let churnRisk = 'Low';
   let urgency = 'Medium';
 
-  // Comprehensive Sentiment Calculation
-  if (rageMatches > 0 || (isSevereCrash && isRecurring) || (isSevereCrash && isTeamImpacted)) {
+  // Sentiment evaluation logic
+  if (totalPositiveMatches > 0 && negScore === 0 && rageScore === 0) {
+    // PURE POSITIVE PATH
+    if (highPosScore > 0 || totalPositiveMatches >= 2) {
+      sentimentScore = Math.min(0.95, 0.70 + totalPositiveMatches * 0.08);
+      sentimentLabel = 'Highly Positive';
+      urgency = 'Low';
+      churnRisk = 'Low';
+    } else {
+      sentimentScore = 0.55;
+      sentimentLabel = 'Positive';
+      urgency = 'Low';
+      churnRisk = 'Low';
+    }
+  } else if (rageScore > 0 || (isSevereCrash && (isRecurring || isTeamImpacted))) {
+    // CRITICAL RAGE / SEVERE BLOCKED PATH
     sentimentScore = isVipTier ? -0.92 : -0.85;
     sentimentLabel = 'Critical Rage';
     churnRisk = isVipTier ? 'Critical' : 'High';
     urgency = 'Urgent';
-  } else if (isSevereCrash || negMatches >= 2 || (isTeamImpacted && negMatches >= 1)) {
+  } else if (isSevereCrash || negScore >= 2 || (isTeamImpacted && negScore >= 1)) {
+    // NEGATIVE PATH
     sentimentScore = isVipTier ? -0.75 : -0.65;
     sentimentLabel = 'Negative';
     churnRisk = isVipTier ? 'High' : 'Medium';
     urgency = isVipTier ? 'Urgent' : 'High';
-  } else if (negMatches >= 1 || lower.includes('issue') || lower.includes('problem') || lower.includes('bug')) {
+  } else if (negScore === 1 && totalPositiveMatches === 0) {
+    // FRUSTRATED PATH
     sentimentScore = -0.40;
     sentimentLabel = 'Frustrated';
     churnRisk = isVipTier ? 'Medium' : 'Low';
     urgency = isVipTier ? 'High' : 'Medium';
-  } else if (posMatches >= 2) {
-    sentimentScore = 0.85;
-    sentimentLabel = 'Highly Positive';
-    churnRisk = 'Low';
-    urgency = 'Low';
-  } else if (posMatches === 1) {
-    sentimentScore = 0.50;
-    sentimentLabel = 'Positive';
+  } else if (totalPositiveMatches > 0 && negScore > 0) {
+    // MIXED SENTIMENT (Constructive feedback with praise)
+    if (totalPositiveMatches >= negScore) {
+      sentimentScore = 0.40;
+      sentimentLabel = 'Positive';
+      urgency = 'Low';
+      churnRisk = 'Low';
+    } else {
+      sentimentScore = -0.30;
+      sentimentLabel = 'Frustrated';
+      urgency = isVipTier ? 'High' : 'Medium';
+      churnRisk = 'Low';
+    }
+  } else {
+    // OBJECTIVE / NEUTRAL
+    sentimentScore = 0.05;
+    sentimentLabel = 'Neutral';
     churnRisk = 'Low';
     urgency = 'Low';
   }
 
   // VIP Tier Priority Elevation Rule:
-  // Any VIP (Enterprise / Gold) reporting an issue automatically gets elevated priority
+  // Elevated only when there is genuine friction (negative sentiment)
   if (isVipTier && sentimentScore < 0) {
     if (urgency === 'Medium') urgency = 'High';
     if (urgency === 'High' && (isSevereCrash || isTeamImpacted || isRecurring)) urgency = 'Urgent';
@@ -231,7 +295,13 @@ function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, 
   const subject = `${category}: ${cleanSnippet}...`;
 
   const vipPill = isVipTier ? `[${tier} VIP Account]` : `[${tier}]`;
-  const aiSummary = `${customerName} ${vipPill} reported a critical friction point via ${channel} (${deviceType}). Identified ${category.toLowerCase()}${isSevereCrash ? ' with repeated application crashes' : ''}${isTeamImpacted ? ' affecting their entire team' : ''}. Assessed sentiment as ${sentimentLabel} (${sentimentScore.toFixed(2)}) with ${churnRisk} churn vulnerability requiring ${urgency} priority triage.`;
+
+  let aiSummary = '';
+  if (sentimentLabel === 'Highly Positive' || sentimentLabel === 'Positive') {
+    aiSummary = `${customerName} ${vipPill} shared constructive, positive feedback via ${channel} (${deviceType}). Identified ${category.toLowerCase()} with expressed satisfaction. Sentiment assessed as ${sentimentLabel} (+${sentimentScore.toFixed(2)}) with minimal churn risk.`;
+  } else {
+    aiSummary = `${customerName} ${vipPill} reported a touchpoint via ${channel} (${deviceType}). Identified ${category.toLowerCase()}${isSevereCrash ? ' with application friction' : ''}${isTeamImpacted ? ' affecting their team' : ''}. Assessed sentiment as ${sentimentLabel} (${sentimentScore.toFixed(2)}) with ${churnRisk} churn vulnerability requiring ${urgency} priority triage.`;
+  }
 
   return {
     subject,
@@ -252,37 +322,43 @@ function fallbackAnalyzeInteraction({ customerName, tier = 'Standard', company, 
  */
 function fallbackGenerateResponse({ customerName, tier = 'Standard', channel, deviceType, rawMessage, sentimentLabel, category, tone, agentInstructions }) {
   const firstName = customerName.split(' ')[0] || customerName;
-  const isVipTier = tier === 'Enterprise' || tier === 'Gold';
+  const isPositive = sentimentLabel === 'Highly Positive' || sentimentLabel === 'Positive';
 
   let greeting = `Dear ${firstName},`;
-  let closing = `Warm regards,\nOmniX Senior Customer Success Team`;
+  let closing = `Warm regards,\nOmniX Customer Experience Team`;
 
   let responseBody = '';
   let internalNotes = '';
 
-  switch (tone) {
-    case 'De-escalation':
-      greeting = `Dear ${firstName},`;
-      responseBody = `I want to personally apologize for the disruption and frustration this has caused you and your team. As a valued ${tier} partner, we hold your operational stability to the highest standard. I have escalated this issue directly to our Principal Mobile Engineering Pod with P0 priority to hotfix the ${deviceType} startup crash immediately. We have also placed a dedicated engineering monitor on your account.`;
-      internalNotes = `• IMMEDIATE ESCALATION: ${tier} VIP account reporting repeated crashes on ${deviceType}.\n• Check hardware keystore and splash screen initialization crash logs.\n• Dedicated architect assigned. Offer SLA credit or billing waiver.`;
-      break;
+  if (isPositive) {
+    greeting = `Hello ${firstName},`;
+    responseBody = `Thank you so much for the fantastic feedback! We are thrilled to hear that you and your team are having such a great experience with our platform on ${deviceType}. Customer satisfaction is our highest priority, especially for our ${tier} partners. Please let us know if there is anything we can do to make your experience even better!`;
+    internalNotes = `• Positive customer engagement: Logged commendation.\n• Account: ${tier} tier.\n• Opportunity: Invite customer to share a case study or beta test upcoming features.`;
+  } else {
+    switch (tone) {
+      case 'De-escalation':
+        greeting = `Dear ${firstName},`;
+        responseBody = `I want to personally apologize for the disruption and frustration this has caused you and your team. As a valued ${tier} partner, we hold your operational stability to the highest standard. I have escalated this issue directly to our Principal Engineering Pod with P0 priority to address the ${deviceType} issue immediately. We have also placed a dedicated engineering monitor on your account.`;
+        internalNotes = `• IMMEDIATE ESCALATION: ${tier} VIP account reporting issue on ${deviceType}.\n• Dedicated architect assigned. Offer SLA credit or billing waiver.`;
+        break;
 
-    case 'Executive':
-      greeting = `Dear ${customerName},`;
-      responseBody = `Thank you for bringing this critical issue to our executive attention. Uninterrupted service is our foremost commitment to our ${tier} clients. I am coordinating directly with our VP of Engineering to diagnose the root cause of the startup crash reported by your team and provide you with an expedited patch today.`;
-      internalNotes = `• High-touch Executive communication dispatched.\n• Coordinate with Client Executive for ${tier} retention.\n• Verify crash telemetry in Firebase/Sentry for affected account UUID.`;
-      break;
+      case 'Executive':
+        greeting = `Dear ${customerName},`;
+        responseBody = `Thank you for bringing this critical issue to our executive attention. Uninterrupted service is our foremost commitment to our ${tier} clients. I am coordinating directly with our engineering leadership to diagnose the root cause and provide you with an expedited patch today.`;
+        internalNotes = `• High-touch Executive communication dispatched.\n• Coordinate with Client Executive for ${tier} retention.`;
+        break;
 
-    case 'Consultative':
-      responseBody = `Thank you for reaching out regarding the ${deviceType} experience. We have identified that startup crashes under specific OS updates can be temporarily mitigated by clearing the local biometric/keystore cache while our mobile team prepares the upcoming patch. I have detailed the step-by-step resolution below.`;
-      internalNotes = `• Consultative resolution provided.\n• Provide relevant documentation link for ${category}.\n• Follow up in 24 hours to confirm customer satisfaction.`;
-      break;
+      case 'Consultative':
+        responseBody = `Thank you for reaching out regarding your ${deviceType} experience. We have documented recommended best practices for ${category.toLowerCase()} and our engineering team is reviewing your configuration to ensure optimal stability.`;
+        internalNotes = `• Consultative resolution provided.\n• Provide relevant documentation link for ${category}.\n• Follow up in 24 hours to confirm customer satisfaction.`;
+        break;
 
-    case 'Empathetic':
-    default:
-      responseBody = `Thank you so much for reaching out to us, and please accept our sincere apologies for the stress this crash has caused your team. We know how critical it is for your daily workflow, and having the app fail on launch is completely unacceptable. We are actively investigating this right now and will keep you updated every step of the way until it is 100% resolved.`;
-      internalNotes = `• High-empathy tone applied to alleviate customer anxiety.\n• High-priority customer ${tier} account.\n• Review crash logs and verify resolution status before closing ticket.`;
-      break;
+      case 'Empathetic':
+      default:
+        responseBody = `Thank you so much for reaching out to us, and please accept our sincere apologies for any inconvenience this has caused your team. We know how critical this is for your daily workflow, and we are actively investigating this right now to make sure you are taken care of.`;
+        internalNotes = `• High-empathy tone applied to alleviate customer anxiety.\n• Review logs and verify resolution status before closing ticket.`;
+        break;
+    }
   }
 
   if (agentInstructions) {
